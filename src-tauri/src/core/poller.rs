@@ -618,6 +618,7 @@ mod tests {
             settings: Default::default(),
             refreshing: true,
             notice: None,
+            bridge_notice: None,
             recovery: false,
             recovered: Vec::new(),
             ignored_sources: Vec::new(),

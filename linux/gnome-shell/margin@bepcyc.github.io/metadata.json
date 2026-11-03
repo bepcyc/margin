@@ -1,0 +1,6 @@
+{
+  "uuid": "margin@bepcyc.github.io",
+  "name": "Margin Bridge",
+  "description": "Positions Margin below its panel indicator",
+  "shell-version": ["46"]
+}

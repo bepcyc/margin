@@ -61,6 +61,17 @@ async function openSettings(page: Page): Promise<void> {
   await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible()
 }
 
+test('panel recovery notice survives a refresh', async ({ page }) => {
+  const state = createDemoState(null)
+  state.bridgeNotice = 'The GNOME panel connection is unavailable. Close and restart Margin to restore the tray icon.'
+  await installDesktopBridge(page, { state, failure: 'none' })
+  await page.goto('/')
+  const notice = page.getByRole('alert').filter({ hasText: state.bridgeNotice })
+  await expect(notice).toBeVisible()
+  await page.getByRole('button', { name: 'Refresh usage' }).click()
+  await expect(notice).toBeVisible()
+})
+
 async function expectWithinViewport(page: Page, locator: Locator): Promise<void> {
   await expect(locator).toBeVisible()
   const bounds = await locator.evaluate(element => {

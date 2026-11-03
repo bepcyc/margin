@@ -285,6 +285,7 @@ onUnmounted(() => {
     <div v-else ref="shell" class="app-shell" :class="{ 'is-preview': demo, 'fit-content': fitsContent }" :data-fit-height="fitHeight">
       <div v-if="demo || nativeArrowX !== null" class="popover-arrow" :style="demo ? undefined : nativeArrowStyle" aria-hidden="true"/>
       <div ref="popover" class="popover">
+        <div v-if="state.bridgeNotice" class="notice-banner" role="alert"><AppIcon name="alert" :size="13"/><span>{{ state.bridgeNotice }}</span></div>
         <div v-if="state.recovery" class="notice-banner recovery-banner" role="alert"><AppIcon name="alert" :size="13"/><div><p>Settings file couldn’t be read. Reset keeps a backup next to it.</p><p v-if="state.notice" class="recovery-detail">{{ state.notice }}</p><button class="button button-small" :disabled="busy" @click="resetStore">Back up and reset settings</button></div></div>
         <div v-else-if="state.notice" class="notice-banner" role="alert"><AppIcon name="alert" :size="13"/><span>{{ state.notice }}</span></div>
         <template v-if="page === 'overview'">

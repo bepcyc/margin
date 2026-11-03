@@ -18,7 +18,7 @@ export function useMargin() {
   const query = new URLSearchParams(window.location.search)
   const demo = query.get('demo') === '1'
   const desktop = typeof window.__TAURI__?.core.invoke === 'function'
-  const state = ref<AppState>(demo ? createDemoState(query.get('state')) : { revision: 0, accounts: [], settings: { ...defaultSettings }, refreshing: false, notice: null, recovery: false, recovered: [], ignoredSources: [], switching: { activeAccountIds: [], restore: null } })
+  const state = ref<AppState>(demo ? createDemoState(query.get('state')) : { revision: 0, accounts: [], settings: { ...defaultSettings }, refreshing: false, notice: null, bridgeNotice: null, recovery: false, recovered: [], ignoredSources: [], switching: { activeAccountIds: [], restore: null } })
   const demoRunning = query.get('running') === '1'
   const loading = ref(desktop && !demo)
   const connectionError = ref<string | null>(null)

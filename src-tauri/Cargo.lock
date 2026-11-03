@@ -2265,6 +2265,8 @@ dependencies = [
  "block2",
  "chrono",
  "dirs 7.0.0",
+ "gio",
+ "glib",
  "objc2",
  "objc2-app-kit",
  "objc2-foundation",

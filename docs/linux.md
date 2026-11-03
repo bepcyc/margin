@@ -16,7 +16,33 @@ pnpm tauri dev
 
 ## Desktop and accounts
 
-For tray access, the desktop needs a system-tray implementation. GNOME may need an AppIndicator extension. On Linux, Tauri does not emit its tray click events; use the tray menu's **Open Margin** item to open the window. Launching a second instance also opens the existing window. Window positioning depends on the desktop and display server; anchoring to the tray is not guaranteed, especially on Wayland. See [Tauri's tray event documentation](https://docs.rs/tauri/latest/tauri/tray/enum.TrayIconEvent.html).
+For tray access, the desktop needs a system-tray implementation. GNOME may need an AppIndicator extension. On Linux, Tauri does not emit its tray click events; use the tray menu's **Open Margin** item to open the window. Launching a second instance also opens the existing window. Without the optional GNOME bridge below, anchoring to the tray is not guaranteed. See [Tauri's tray event documentation](https://docs.rs/tauri/latest/tauri/tray/enum.TrayIconEvent.html).
+
+### GNOME Shell 46 bridge
+
+The optional bridge supplies a panel indicator and positions Margin below it. It has been exercised with GNOME Shell 46 on X11 in Xvfb; Wayland, other Shell versions and mixed-DPI displays are not yet qualified. Install it explicitly from a checkout:
+
+```sh
+gnome-extensions pack linux/gnome-shell/margin@bepcyc.github.io --out-dir /tmp
+gnome-extensions install /tmp/margin@bepcyc.github.io.shell-extension.zip
+```
+
+Sign out and back in so GNOME Shell discovers the newly installed extension, then enable it:
+
+```sh
+gnome-extensions enable margin@bepcyc.github.io
+```
+
+Restart Margin after enabling or disabling the extension. If the extension was absent when Margin started, the existing StatusNotifier tray is used until restart. If a connection fails after registration begins, Margin opens a recovery notice rather than creating a second tray icon; close and restart it to retry. A session-bus failure with a live but disconnected Shell may leave an old indicator across restarts.
+
+The bridge is intended for a trusted local desktop session. It binds requests to a D-Bus connection and associates a window by PID and window class; these checks do not authenticate Margin against other processes of the same user. The icon and its tooltip are sent over the session bus, but credentials are not.
+
+To remove the bridge, close Margin, then run:
+
+```sh
+gnome-extensions disable margin@bepcyc.github.io
+gnome-extensions uninstall margin@bepcyc.github.io
+```
 
 Margin discovers OAuth sign-ins from `~/.claude/.credentials.json`, `~/.codex/auth.json`, matching home dotfolders and the `CLAUDE_CONFIG_DIR` or `CODEX_HOME` environment variables. Other folders can be added in Settings. A Codex account stored only in a system credential store is not discovered by the file reader. An API key alone does not provide OAuth usage data. Tokens stay in the Rust backend; do not attach credentials, account details or raw provider responses to reports.
 

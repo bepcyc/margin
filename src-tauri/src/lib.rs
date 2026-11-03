@@ -1,6 +1,8 @@
 pub mod cli;
 mod commands;
 pub mod core;
+#[cfg(target_os = "linux")]
+mod gnome_bridge;
 mod make_active;
 mod runtime;
 mod updates;
@@ -15,7 +17,10 @@ use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_notification::NotificationExt;
 
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "linux")]
+    let builder = builder.manage(gnome_bridge::Bridge::default());
+    builder
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             tray::show(app, false)
         }))
@@ -85,6 +90,14 @@ pub fn run() {
                 updates::start_background_checks(handle.clone(), runtime.clone());
                 poller::start(handle.clone(), runtime);
                 if !std::env::args().any(|argument| argument == "--background") {
+                    #[cfg(target_os = "linux")]
+                    if !handle
+                        .state::<gnome_bridge::Bridge>()
+                        .wait_for_backend()
+                        .await
+                    {
+                        return;
+                    }
                     tray::show(&handle, false);
                 }
             });
@@ -109,6 +122,10 @@ pub fn run() {
                                 .state::<tray::Visibility>()
                                 .blur_generation
                                 .current(generation)
+                                && !window
+                                    .app_handle()
+                                    .state::<gnome_bridge::Bridge>()
+                                    .degraded()
                                 && matches!(window.is_focused(), Ok(false))
                                 && window.hide().is_ok()
                             {
@@ -142,6 +159,15 @@ pub fn run() {
             }
             WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
+                #[cfg(target_os = "linux")]
+                if window
+                    .app_handle()
+                    .state::<gnome_bridge::Bridge>()
+                    .degraded()
+                {
+                    window.app_handle().exit(0);
+                    return;
+                }
                 if window.hide().is_ok() {
                     tray::mark_hidden(window.app_handle());
                 }

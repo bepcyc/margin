@@ -477,9 +477,6 @@ pub fn update(app: &AppHandle, state: &AppState) {
     let revision = state.revision;
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
-        let Some(tray) = handle.tray_by_id("margin") else {
-            return;
-        };
         let visibility = handle.state::<Visibility>();
         let Ok(mut previous) = visibility.presentation.lock() else {
             return;
@@ -488,6 +485,16 @@ pub fn update(app: &AppHandle, state: &AppState) {
             return;
         }
         previous.revision = revision;
+        #[cfg(target_os = "linux")]
+        if handle.state::<crate::gnome_bridge::Bridge>().active() {
+            crate::gnome_bridge::update(&handle, &tooltip, size, &pixels, revision);
+            previous.pixels = pixels;
+            previous.tooltip = tooltip;
+            return;
+        }
+        let Some(tray) = handle.tray_by_id("margin") else {
+            return;
+        };
         if previous.pixels != pixels {
             let updated = tray.set_icon_with_as_template(
                 Some(Image::new_owned(pixels.clone(), size, size)),
@@ -547,6 +554,16 @@ fn fit_backdrop(window: &tauri::WebviewWindow) {
 
 pub fn show(app: &AppHandle, settings: bool) {
     let handle = app.clone();
+    #[cfg(target_os = "linux")]
+    tauri::async_runtime::spawn(async move {
+        let bridge = handle.state::<crate::gnome_bridge::Bridge>();
+        if !bridge.degraded() && !bridge.wait_for_backend().await {
+            return;
+        }
+        let window_app = handle.clone();
+        let _ = handle.run_on_main_thread(move || show_on_main_thread(&window_app, settings));
+    });
+    #[cfg(not(target_os = "linux"))]
     let _ = app.run_on_main_thread(move || show_on_main_thread(&handle, settings));
 }
 
@@ -574,7 +591,46 @@ pub fn fit(app: &AppHandle, height: f64) -> Result<(), String> {
     .map_err(|_| "Popover size is unavailable.".into())
 }
 
+#[cfg(target_os = "linux")]
+fn set_fixed_size(window: &tauri::WebviewWindow, size: tauri::Size) -> tauri::Result<()> {
+    let (width, height) = match size {
+        tauri::Size::Logical(size) => (
+            tauri::LogicalUnit::new(size.width).into(),
+            tauri::LogicalUnit::new(size.height).into(),
+        ),
+        tauri::Size::Physical(size) => (
+            tauri::PhysicalUnit::new(size.width as i32).into(),
+            tauri::PhysicalUnit::new(size.height as i32).into(),
+        ),
+    };
+    let constraints = tauri::WindowSizeConstraints {
+        min_width: Some(width),
+        max_width: Some(width),
+        min_height: Some(height),
+        max_height: Some(height),
+    };
+    window.set_resizable(true)?;
+    window.set_size_constraints(constraints)?;
+    window.set_size(size)
+}
+
 fn place(app: &AppHandle, window: &tauri::WebviewWindow) {
+    #[cfg(target_os = "linux")]
+    if app.state::<crate::gnome_bridge::Bridge>().active() {
+        let height = popover_height(
+            app.state::<Visibility>()
+                .content_height
+                .lock()
+                .ok()
+                .and_then(|value| *value),
+        );
+        let _ = set_fixed_size(
+            window,
+            tauri::LogicalSize::new(POPOVER_WIDTH, height).into(),
+        );
+        crate::gnome_bridge::reposition(app);
+        return;
+    }
     let height = popover_height(
         app.state::<Visibility>()
             .content_height
@@ -628,10 +684,12 @@ fn place(app: &AppHandle, window: &tauri::WebviewWindow) {
                 cfg!(target_os = "macos"),
                 height,
             );
-            let resized = window.set_size(tauri::PhysicalSize::new(
-                placed.frame.width as u32,
-                placed.frame.height as u32,
-            ));
+            let size =
+                tauri::PhysicalSize::new(placed.frame.width as u32, placed.frame.height as u32);
+            #[cfg(target_os = "linux")]
+            let resized = set_fixed_size(window, size.into());
+            #[cfg(not(target_os = "linux"))]
+            let resized = window.set_size(size);
             let positioned = window.set_position(tauri::PhysicalPosition::new(
                 placed.frame.x as i32,
                 placed.frame.y as i32,
@@ -659,6 +717,10 @@ fn show_on_main_thread(app: &AppHandle, settings: bool) {
         place(app, &window);
         let _ = window.show();
         let _ = window.set_focus();
+        #[cfg(target_os = "linux")]
+        if app.state::<crate::gnome_bridge::Bridge>().active() {
+            crate::gnome_bridge::reposition(app);
+        }
         if settings {
             let _ = app.emit("open_settings", ());
         }
@@ -679,7 +741,40 @@ fn show_on_main_thread(app: &AppHandle, settings: bool) {
     }
 }
 
+#[cfg(target_os = "linux")]
+pub(crate) fn toggle_from_bridge(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        if window.is_visible().unwrap_or(false) {
+            if window.hide().is_ok() {
+                mark_hidden(app);
+            }
+        } else {
+            show(app, false);
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn initial_bridge_icon(app: &AppHandle) -> (u32, Vec<u8>, String) {
+    let size = icon_size(app);
+    (
+        size,
+        ring_rgba(size, None, false, icon_style()),
+        "Margin · Checking accounts".into(),
+    )
+}
+
 pub fn setup(app: &AppHandle) -> tauri::Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        crate::gnome_bridge::start(app);
+        Ok(())
+    }
+    #[cfg(not(target_os = "linux"))]
+    setup_native(app)
+}
+
+pub(crate) fn setup_native(app: &AppHandle) -> tauri::Result<()> {
     let show_item = MenuItem::with_id(app, "show", "Open Margin", true, None::<&str>)?;
     let refresh_item = MenuItem::with_id(app, "refresh", "Refresh usage", true, None::<&str>)?;
     let settings_item = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
@@ -808,6 +903,7 @@ mod tests {
             },
             refreshing: false,
             notice: None,
+            bridge_notice: None,
             recovery: false,
             recovered: Vec::new(),
             ignored_sources: Vec::new(),
@@ -841,6 +937,7 @@ mod tests {
             settings: Settings::default(),
             refreshing: false,
             notice: None,
+            bridge_notice: None,
             recovery: false,
             recovered: Vec::new(),
             ignored_sources: Vec::new(),
@@ -1012,6 +1109,7 @@ mod tests {
             },
             refreshing: false,
             notice: None,
+            bridge_notice: None,
             recovery: false,
             recovered: Vec::new(),
             ignored_sources: Vec::new(),
