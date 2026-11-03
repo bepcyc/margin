@@ -8,6 +8,12 @@ test('browser entry never pretends to read real accounts', async ({ page }) => {
   await expect(page.getByText('Sample data', { exact: true })).toBeVisible()
 })
 
+test('loads the bundled interface font', async ({ page }) => {
+  await page.goto('/?demo=1')
+  const fonts = await page.evaluate(async () => (await document.fonts.load('650 15px Inter')).map(font => ({ family: font.family, status: font.status })))
+  expect(fonts).toEqual([{ family: 'Inter', status: 'loaded' }])
+})
+
 test.describe('Linux presentation', () => {
   test.use({ userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36' })
 
