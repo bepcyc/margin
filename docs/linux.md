@@ -1,6 +1,6 @@
 # Linux development
 
-This port is based on upstream commit `9ab00933df48ba44cbbd8e180259e48525a930e3` (v0.9.0). It keeps the Vue interface and the Rust provider code shared with macOS and Windows. Linux support is experimental: a debug build has run on Pop!_OS 24.04, GNOME 46 and X11, but other desktops and Wayland have not been qualified.
+This port is based on upstream commit `9ab00933df48ba44cbbd8e180259e48525a930e3` (v0.9.0). It keeps the Vue interface and the Rust provider code shared with macOS and Windows. Linux support is experimental: a debug build has run on Pop!_OS 24.04 with GNOME 46 and X11, including an isolated GNOME/Xvfb session. Other desktops and Wayland have not been qualified.
 
 ## Build and run
 
