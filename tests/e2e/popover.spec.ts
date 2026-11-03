@@ -8,6 +8,18 @@ test('browser entry never pretends to read real accounts', async ({ page }) => {
   await expect(page.getByText('Sample data', { exact: true })).toBeVisible()
 })
 
+test.describe('Linux presentation', () => {
+  test.use({ userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36' })
+
+  test('uses Linux platform, control shortcuts and no popover arrow', async ({ page }) => {
+    await page.goto('/?demo=1')
+    await expect(page.locator('html')).toHaveAttribute('data-platform', 'linux')
+    await expect(page.locator('.popover-arrow')).toBeHidden()
+    await page.getByRole('button', { name: 'Open settings' }).hover()
+    await expect(page.getByRole('tooltip')).toHaveText('Settings (Ctrl+,)')
+  })
+})
+
 for (const theme of ['dark', 'light']) {
   test(`${theme} overview fits a tray-sized window`, async ({ page }, info) => {
     const errors: string[] = []

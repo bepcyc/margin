@@ -190,13 +190,13 @@ button:disabled:hover {
 .desktop-stage .popover-arrow {
   top: 9px;
 }
-:root[data-platform=windows] .desktop-stage .app-shell {
+:root:is([data-platform=windows], [data-platform=linux]) .desktop-stage .app-shell {
   padding: 6px;
 }
-:root[data-platform=windows] .popover {
+:root:is([data-platform=windows], [data-platform=linux]) .popover {
   border-radius: 8px;
 }
-:root[data-platform=windows] .popover-arrow {
+:root:is([data-platform=windows], [data-platform=linux]) .popover-arrow {
   display: none;
 }
 .app-header {

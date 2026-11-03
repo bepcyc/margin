@@ -125,6 +125,8 @@ Exact files, Keychain items, and hosts: [PRIVACY.md](PRIVACY.md). Vulnerabilitie
 
 Run from source, preview with sample data, and run tests: [CONTRIBUTING.md](CONTRIBUTING.md).
 
+Experimental Linux build and desktop notes: [docs/linux.md](docs/linux.md).
+
 ## Contribute
 
 [Report a bug](https://github.com/Abulkosim/margin/issues/new/choose) with the version, OS, display scaling, and steps. Redact account details; never attach tokens or credential files. Provider parsing changes need a fixture and a regression test.

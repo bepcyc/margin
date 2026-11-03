@@ -7,7 +7,9 @@ mod updates;
 
 use crate::core::{poller, tray};
 use runtime::Runtime;
-use std::{sync::Arc, time::Instant};
+use std::sync::Arc;
+#[cfg(not(target_os = "linux"))]
+use std::time::Instant;
 use tauri::{Manager, WindowEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_notification::NotificationExt;
@@ -90,17 +92,53 @@ pub fn run() {
         })
         .on_window_event(|window, event| match event {
             WindowEvent::Focused(false) => {
-                if let Ok(mut last_blur) = window
+                #[cfg(target_os = "linux")]
+                {
+                    let generation = window
+                        .app_handle()
+                        .state::<tray::Visibility>()
+                        .blur_generation
+                        .next();
+                    let window = window.clone();
+                    tauri::async_runtime::spawn(async move {
+                        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                        let app = window.app_handle().clone();
+                        let _ = app.run_on_main_thread(move || {
+                            if window
+                                .app_handle()
+                                .state::<tray::Visibility>()
+                                .blur_generation
+                                .current(generation)
+                                && matches!(window.is_focused(), Ok(false))
+                                && window.hide().is_ok()
+                            {
+                                tray::mark_hidden(window.app_handle());
+                            }
+                        });
+                    });
+                }
+                #[cfg(not(target_os = "linux"))]
+                {
+                    if let Ok(mut last_blur) = window
+                        .app_handle()
+                        .state::<tray::Visibility>()
+                        .last_blur
+                        .lock()
+                    {
+                        *last_blur = Some(Instant::now());
+                    }
+                    if window.hide().is_ok() {
+                        tray::mark_hidden(window.app_handle());
+                    }
+                }
+            }
+            #[cfg(target_os = "linux")]
+            WindowEvent::Focused(true) => {
+                window
                     .app_handle()
                     .state::<tray::Visibility>()
-                    .last_blur
-                    .lock()
-                {
-                    *last_blur = Some(Instant::now());
-                }
-                if window.hide().is_ok() {
-                    tray::mark_hidden(window.app_handle());
-                }
+                    .blur_generation
+                    .next();
             }
             WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();

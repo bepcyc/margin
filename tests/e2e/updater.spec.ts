@@ -1,6 +1,8 @@
 import { expect, test, type Page } from '@playwright/test'
 import { createDemoState } from '../../src/lib/demo.ts'
 
+test.use({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' })
+
 declare global {
   interface Window {
     __UPDATE_TEST__?: {
@@ -52,6 +54,21 @@ async function openUpdates(page: Page): Promise<void> {
   await page.getByRole('button', { name: /^(Open settings|Settings, update available)$/ }).click()
   await page.getByRole('region', { name: 'Updates', exact: true }).scrollIntoViewIfNeeded()
 }
+
+test.describe('Linux updates', () => {
+  test.use({ userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36' })
+
+  test('directs updates to the package source without offering updater controls', async ({ page }) => {
+    await bridge(page)
+    await page.goto('/')
+    await openUpdates(page)
+    const updates = page.getByRole('region', { name: 'Updates', exact: true })
+    await expect(updates.getByRole('status')).toHaveText('Update Margin through your package source.')
+    await expect(updates.getByRole('switch')).toHaveCount(0)
+    await expect(updates.getByRole('button')).toHaveCount(0)
+    expect(await page.evaluate(() => window.__UPDATE_TEST__?.calls)).toEqual([])
+  })
+})
 
 test('updates require explicit check and install, preserve focus, and survive Settings reopening', async ({ page }) => {
   await bridge(page)

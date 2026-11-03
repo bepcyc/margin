@@ -19,9 +19,11 @@ const popoverPlacementSchema = z.object({ revision: z.number().int().nonnegative
 const popoverPlacement = ref<z.infer<typeof popoverPlacementSchema>>({ revision: 0, arrowX: null })
 const viewportWidth = ref(window.innerWidth)
 const isWindows = navigator.userAgent.includes('Windows')
+const isLinux = navigator.userAgent.includes('Linux')
+const usesControlKey = isWindows || isLinux
 const nativeArrowX = computed(() => {
   const x = popoverPlacement.value.arrowX
-  if (!desktop || demo || isWindows || x === null) return null
+  if (!desktop || demo || usesControlKey || x === null) return null
   return x >= 26 && x <= viewportWidth.value - 26 ? x : null
 })
 const nativeArrowStyle = computed(() => nativeArrowX.value === null ? undefined : { left: `${nativeArrowX.value - 6}px` })
@@ -91,7 +93,7 @@ watch(counts, value => {
 
 watchEffect(() => {
   document.documentElement.dataset.theme = dark.value ? 'dark' : 'light'
-  document.documentElement.dataset.platform = isWindows ? 'windows' : 'mac'
+  document.documentElement.dataset.platform = isWindows ? 'windows' : isLinux ? 'linux' : 'mac'
   document.documentElement.style.colorScheme = dark.value ? 'dark' : 'light'
 })
 
@@ -274,7 +276,7 @@ onUnmounted(() => {
     <div v-if="!desktop && !demo" class="desktop-gate">
       <span class="gate-logo"><AppIcon name="margin" :size="36"/></span>
       <p class="eyebrow">CLAUDE + CODEX</p><h1>Track your usage.</h1>
-      <p class="gate-description">See account limits and reset times in the macOS menu bar or Windows system tray.</p>
+      <p class="gate-description">See account limits and reset times in the menu bar or system tray.</p>
       <a class="button button-primary" href="https://github.com/Abulkosim/margin/releases" target="_blank" rel="noopener noreferrer">Download Margin<AppIcon name="external" :size="14"/></a>
       <a class="preview-link" href="?demo=1">Preview <span>with sample data</span><AppIcon name="chevron" :size="12"/></a>
       <p class="gate-footnote">Reads CLI sign-ins. Changes them only when you ask.</p>
@@ -287,7 +289,7 @@ onUnmounted(() => {
         <div v-else-if="state.notice" class="notice-banner" role="alert"><AppIcon name="alert" :size="13"/><span>{{ state.notice }}</span></div>
         <template v-if="page === 'overview'">
           <h1 class="sr-only">Usage remaining</h1>
-          <header class="app-header"><div class="wordmark"><AppIcon name="margin" :size="18"/><span>margin</span></div><div v-if="showFilters" class="account-filters" role="group" aria-label="Filter by provider"><button v-for="option in filterOptions" :key="option.id" :class="{ active: filter === option.id }" :aria-pressed="filter === option.id" @click="filter = option.id">{{ option.label }}<span>{{ counts[option.id] }}</span></button></div><div class="header-actions"><AppTooltip :text="refreshing ? 'Checking usage' : `Refresh usage (${isWindows ? 'Ctrl+R' : '⌘R'})`"><button class="icon-button refresh-button" :class="{ pulsing: refreshing }" aria-label="Refresh usage" :disabled="busy || refreshing" @click="refresh"><AppIcon name="refresh" :size="16"/></button></AppTooltip><AppTooltip :text="`Settings (${isWindows ? 'Ctrl+,' : '⌘,'})`"><button class="icon-button settings-button" :aria-label="updater.available.value ? 'Settings, update available' : 'Open settings'" @click="openSettings()"><AppIcon name="settings" :size="18"/><span v-if="updater.available.value" class="update-dot" aria-hidden="true"/></button></AppTooltip></div></header>
+          <header class="app-header"><div class="wordmark"><AppIcon name="margin" :size="18"/><span>margin</span></div><div v-if="showFilters" class="account-filters" role="group" aria-label="Filter by provider"><button v-for="option in filterOptions" :key="option.id" :class="{ active: filter === option.id }" :aria-pressed="filter === option.id" @click="filter = option.id">{{ option.label }}<span>{{ counts[option.id] }}</span></button></div><div class="header-actions"><AppTooltip :text="refreshing ? 'Checking usage' : `Refresh usage (${usesControlKey ? 'Ctrl+R' : '⌘R'})`"><button class="icon-button refresh-button" :class="{ pulsing: refreshing }" aria-label="Refresh usage" :disabled="busy || refreshing" @click="refresh"><AppIcon name="refresh" :size="16"/></button></AppTooltip><AppTooltip :text="`Settings (${usesControlKey ? 'Ctrl+,' : '⌘,'})`"><button class="icon-button settings-button" :aria-label="updater.available.value ? 'Settings, update available' : 'Open settings'" @click="openSettings()"><AppIcon name="settings" :size="18"/><span v-if="updater.available.value" class="update-dot" aria-hidden="true"/></button></AppTooltip></div></header>
 
           <main ref="scroller" class="accounts-scroll" :class="{ 'empty-scroll': !state.accounts.length }" aria-label="Account usage">
             <div v-if="loading" class="initial-loading" role="status" aria-label="Loading accounts"><div v-for="index in 2" :key="index" class="skeleton-card"><div class="skeleton skeleton-heading"/><div class="skeleton skeleton-label"/><div class="skeleton skeleton-bar"/><div class="skeleton skeleton-label"/><div class="skeleton skeleton-bar"/></div><p>Reading your accounts…</p></div>

@@ -8,6 +8,8 @@ use super::{
 use crate::runtime::{AppState, Runtime};
 use chrono::Utc;
 use serde::Serialize;
+#[cfg(any(target_os = "linux", test))]
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::{
     sync::{Arc, Mutex},
     time::Instant,
@@ -20,6 +22,21 @@ use tauri::{
 };
 #[cfg(not(target_os = "macos"))]
 use tauri_plugin_positioner::{Position, WindowExt};
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Default)]
+pub(crate) struct BlurGeneration(AtomicU64);
+
+#[cfg(any(target_os = "linux", test))]
+impl BlurGeneration {
+    pub(crate) fn next(&self) -> u64 {
+        self.0.fetch_add(1, Ordering::Relaxed).wrapping_add(1)
+    }
+
+    pub(crate) fn current(&self, generation: u64) -> bool {
+        self.0.load(Ordering::Relaxed) == generation
+    }
+}
 
 #[derive(Default)]
 struct Presentation {
@@ -72,6 +89,8 @@ fn cached_ring(cache: &mut Option<(RingKey, Vec<u8>)>, key: RingKey) -> (Vec<u8>
 #[derive(Default)]
 pub struct Visibility {
     pub last_blur: Mutex<Option<Instant>>,
+    #[cfg(target_os = "linux")]
+    pub(crate) blur_generation: BlurGeneration,
     presentation: Mutex<Presentation>,
     ring: Mutex<Option<(RingKey, Vec<u8>)>>,
     pub placement: Mutex<PopoverPlacement>,
@@ -634,6 +653,8 @@ fn place(app: &AppHandle, window: &tauri::WebviewWindow) {
 
 fn show_on_main_thread(app: &AppHandle, settings: bool) {
     if let Some(window) = app.get_webview_window("main") {
+        #[cfg(target_os = "linux")]
+        app.state::<Visibility>().blur_generation.next();
         let visible = window.is_visible().unwrap_or(false);
         place(app, &window);
         let _ = window.show();
@@ -733,6 +754,18 @@ mod tests {
         model::{AccountSource, Identity, Provider, Snapshot, UsageError, UsageWindow},
         settings::Settings,
     };
+
+    #[test]
+    fn blur_generation_cancels_older_checks() {
+        let generation = BlurGeneration::default();
+        let first_blur = generation.next();
+        assert!(generation.current(first_blur));
+        generation.next();
+        assert!(!generation.current(first_blur));
+        let second_blur = generation.next();
+        assert!(generation.current(second_blur));
+        assert!(!generation.current(first_blur));
+    }
 
     fn account(id: &str, usage: &[f64]) -> Account {
         Account {
