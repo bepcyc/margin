@@ -27,6 +27,7 @@ pub struct AppState {
     pub settings: Settings,
     pub refreshing: bool,
     pub notice: Option<String>,
+    pub bridge_notice: Option<String>,
     pub recovery: bool,
     pub recovered: Vec<String>,
     pub ignored_sources: Vec<String>,
@@ -99,6 +100,7 @@ impl Runtime {
                 settings: saved.settings,
                 refreshing: false,
                 notice: recovery_error.clone(),
+                bridge_notice: None,
                 recovery: recovery_error.is_some(),
                 recovered: saved.recovered.clone(),
                 ignored_sources: saved.ignored_sources,
@@ -157,6 +159,7 @@ impl Runtime {
             },
             refreshing: false,
             notice: None,
+            bridge_notice: inner.view.bridge_notice.clone(),
             recovery: false,
             recovered: Vec::new(),
             ignored_sources: Vec::new(),
@@ -385,6 +388,15 @@ mod tests {
             .is_some());
         assert!(runtime.persist(&inner.view, &inner.alerts).is_ok());
         assert_eq!(std::fs::read_to_string(history_path).unwrap(), "{damaged");
+    }
+
+    #[tokio::test]
+    async fn reset_keeps_panel_recovery_notice() {
+        let directory = tempfile::tempdir().unwrap();
+        let runtime = Runtime::new(directory.path().join("state.json")).unwrap();
+        runtime.inner.lock().await.view.bridge_notice = Some("Restart Margin".into());
+        let view = runtime.reset_store().await.unwrap();
+        assert_eq!(view.bridge_notice.as_deref(), Some("Restart Margin"));
     }
 
     #[tokio::test]

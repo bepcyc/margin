@@ -3,7 +3,7 @@ import { createDemoState } from '../../src/lib/demo.ts'
 import type { AppState } from '../../src/lib/model.ts'
 
 declare global {
-  interface Window { __FIT_TEST__?: number[] }
+  interface Window { __FIT_TEST__?: number[]; __FIT_STATE__?: (state: AppState) => void }
 }
 
 
@@ -11,6 +11,8 @@ async function installBridge(page: Page, state: AppState): Promise<void> {
   await page.addInitScript(state => {
     const fits: number[] = []
     window.__FIT_TEST__ = fits
+    let stateHandler: ((event: { payload: unknown }) => void) | undefined
+    window.__FIT_STATE__ = next => stateHandler?.({ payload: next })
     window.__TAURI__ = {
       core: {
         async invoke(command, args) {
@@ -20,7 +22,7 @@ async function installBridge(page: Page, state: AppState): Promise<void> {
           return undefined
         },
       },
-      event: { async listen() { return () => {} } },
+      event: { async listen(event, handler) { if (event === 'state_changed') stateHandler = handler; return () => {} } },
     }
   }, state)
 }
@@ -130,6 +132,39 @@ test('rows expand to the full card one at a time with mouse and keyboard', async
 test.describe('popover height', () => {
   test.use({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' })
 
+  test.describe('Linux panel warning', () => {
+    test.use({ userAgent: 'Mozilla/5.0 (X11; Linux x86_64)' })
+
+    test('re-fits when a panel warning appears and disappears', async ({ page }) => {
+      const state = bridgeState(null, 'compact')
+      await installBridge(page, state)
+      await page.goto('/')
+      await expect(page.locator('.compact-row')).toHaveCount(3)
+      const initial = await lastFit(page)
+      await page.setViewportSize({ width: 420, height: initial })
+      state.revision++
+      state.bridgeNotice = 'The GNOME panel connection is unavailable. Close and restart Margin to restore the tray icon.'
+      await page.evaluate(next => window.__FIT_STATE__?.(next), state)
+      await expect(page.getByRole('button', { name: 'Close', exact: true })).toBeVisible()
+      await expect.poll(() => lastFit(page)).toBeGreaterThan(initial)
+      const withWarning = await lastFit(page)
+      await page.setViewportSize({ width: 420, height: withWarning })
+      await expect.poll(() => page.locator('.compact-row').last().evaluate(element => { const row = element.getBoundingClientRect(); const viewport = element.closest('.accounts-scroll')!.getBoundingClientRect(); return row.bottom <= viewport.bottom && row.top >= viewport.top })).toBe(true)
+      await page.getByRole('button', { name: /^Claude 2/ }).click()
+      await expect(page.locator('.compact-row')).toHaveCount(2)
+      await expect.poll(() => lastFit(page)).toBeLessThan(withWarning)
+      await page.setViewportSize({ width: 420, height: await lastFit(page) })
+      await expect.poll(() => page.locator('.compact-row').last().evaluate(element => { const row = element.getBoundingClientRect(); const viewport = element.closest('.accounts-scroll')!.getBoundingClientRect(); return row.bottom <= viewport.bottom && row.top >= viewport.top })).toBe(true)
+      state.revision++
+      state.bridgeNotice = null
+      const filteredWithWarning = await lastFit(page)
+      await page.evaluate(next => window.__FIT_STATE__?.(next), state)
+      await expect.poll(() => lastFit(page)).toBeLessThan(filteredWithWarning)
+      await page.getByRole('button', { name: /^All 3/ }).click()
+      await expect.poll(() => lastFit(page)).toBe(initial)
+    })
+  })
+
   test('compact fits a shorter window and expand re-measures', async ({ page }, info) => {
     const heights: Record<string, number> = {}
     for (const [key, scenario, count] of [['1 account', 'single', 1], ['5 accounts', 'compact', 5]] as const) {
@@ -183,4 +218,24 @@ test('preview popover is shorter in compact and screenshots in both themes', asy
   console.log(`[${info.project.name}] preview popover heights ${JSON.stringify({ ...heights, 'cards-1-account': cardsSingle })}`)
   expect(heights['1-account']).toBeLessThan(cardsSingle)
   expect(heights['1-account']).toBeLessThan(heights['5-accounts']!)
+})
+
+test.describe('Windows fitted compact layout', () => {
+  test.use({ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' })
+
+  test('keeps filtered rows visible and remeasures expanded content', async ({ page }) => {
+    await installBridge(page, bridgeState(null, 'compact'))
+    await page.goto('/')
+    await expect(page.locator('.compact-row')).toHaveCount(3)
+    await page.getByRole('button', { name: /^Claude 2/ }).click()
+    const filteredHeight = await lastFit(page)
+    await page.setViewportSize({ width: 420, height: filteredHeight })
+    await expect.poll(() => page.locator('.compact-row').last().evaluate(element => {
+      const row = element.getBoundingClientRect()
+      const viewport = element.closest('.accounts-scroll')!.getBoundingClientRect()
+      return row.top >= viewport.top && row.bottom <= viewport.bottom
+    })).toBe(true)
+    await page.locator('.compact-row').first().click()
+    await expect.poll(() => lastFit(page)).toBeGreaterThan(filteredHeight)
+  })
 })

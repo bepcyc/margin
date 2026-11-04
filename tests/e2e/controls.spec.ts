@@ -61,6 +61,30 @@ async function openSettings(page: Page): Promise<void> {
   await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible()
 }
 
+test('panel recovery notice survives a refresh', async ({ page }) => {
+  const state = createDemoState(null)
+  state.bridgeNotice = 'The GNOME panel connection is unavailable. Close and restart Margin to restore the tray icon.'
+  await installDesktopBridge(page, { state, failure: 'none' })
+  await page.goto('/')
+  const notice = page.getByRole('alert').filter({ hasText: state.bridgeNotice })
+  await expect(notice).toBeVisible()
+  await page.getByRole('button', { name: 'Refresh usage' }).click()
+  await expect(notice).toBeVisible()
+  const close = notice.getByRole('button', { name: 'Close', exact: true })
+  await close.focus()
+  await page.keyboard.press('Enter')
+  await expect.poll(() => page.evaluate(() => window.__CONTROL_TEST__?.commands.some(entry => entry.command === 'hide_window'))).toBe(true)
+})
+
+test('panel recovery close works by click', async ({ page }) => {
+  const state = createDemoState(null)
+  state.bridgeNotice = 'The GNOME panel connection is unavailable. Close and restart Margin to restore the tray icon.'
+  await installDesktopBridge(page, { state, failure: 'none' })
+  await page.goto('/')
+  await page.getByRole('alert').getByRole('button', { name: 'Close', exact: true }).click()
+  await expect.poll(() => page.evaluate(() => window.__CONTROL_TEST__?.commands.some(entry => entry.command === 'hide_window'))).toBe(true)
+})
+
 async function expectWithinViewport(page: Page, locator: Locator): Promise<void> {
   await expect(locator).toBeVisible()
   const bounds = await locator.evaluate(element => {
@@ -583,17 +607,21 @@ test('denied notifications explain where to turn them on without a dead button',
   await expect(note.getByRole('button')).toHaveCount(0)
 })
 
-test('daily update checks are on by default and the switch saves the choice', async ({ page }) => {
-  await installDesktopBridge(page, { state: createDemoState(null), failure: 'none' })
-  await page.goto('/')
-  await openSettings(page)
-  const daily = page.getByRole('region', { name: 'Updates', exact: true }).getByRole('switch', { name: 'Check for updates daily', exact: true })
-  await expect(daily).toHaveAttribute('aria-checked', 'true')
-  await daily.click()
-  await expect(daily).toHaveAttribute('aria-checked', 'false')
-  const saved = await savedSettings(page)
-  expect(saved).toHaveLength(1)
-  expect(saved[0]).toMatchObject({ autoCheckUpdates: false })
+test.describe('desktop update settings', () => {
+  test.use({ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' })
+
+  test('daily update checks are on by default and the switch saves the choice', async ({ page }) => {
+    await installDesktopBridge(page, { state: createDemoState(null), failure: 'none' })
+    await page.goto('/')
+    await openSettings(page)
+    const daily = page.getByRole('region', { name: 'Updates', exact: true }).getByRole('switch', { name: 'Check for updates daily', exact: true })
+    await expect(daily).toHaveAttribute('aria-checked', 'true')
+    await daily.click()
+    await expect(daily).toHaveAttribute('aria-checked', 'false')
+    const saved = await savedSettings(page)
+    expect(saved).toHaveLength(1)
+    expect(saved[0]).toMatchObject({ autoCheckUpdates: false })
+  })
 })
 
 test('overview layout defaults to cards and Compact saves the choice', async ({ page }) => {

@@ -45,8 +45,13 @@ pub fn get_popover_placement(
 }
 
 #[tauri::command]
-pub fn fit_popover(app: AppHandle, height: f64) -> Result<(), String> {
-    crate::core::tray::fit(&app, height)
+pub fn fit_popover(
+    app: AppHandle,
+    height: f64,
+    pixel_ratio: f64,
+    fit_content: bool,
+) -> Result<(), String> {
+    crate::core::tray::fit(&app, height, pixel_ratio, fit_content)
 }
 
 #[tauri::command]
@@ -304,6 +309,11 @@ pub async fn reset_store(
 
 #[tauri::command]
 pub fn hide_window(app: AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    if app.state::<crate::gnome_bridge::Bridge>().degraded() {
+        app.exit(0);
+        return Ok(());
+    }
     app.get_webview_window("main")
         .ok_or("Window is unavailable.")?
         .hide()
@@ -344,6 +354,7 @@ mod tests {
             settings: Settings::default(),
             refreshing: false,
             notice: None,
+            bridge_notice: None,
             recovery: false,
             recovered: Vec::new(),
             ignored_sources: Vec::new(),

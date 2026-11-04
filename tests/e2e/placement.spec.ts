@@ -109,3 +109,16 @@ test.describe('Windows popover placement', () => {
     expect(await page.locator('.popover').boundingBox()).toEqual({ x: 6, y: 6, width: 408, height: 648 })
   })
 })
+
+test.describe('Linux popover placement', () => {
+  test.use({ userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36' })
+
+  test('Linux keeps a rounded panel without a tray arrow', async ({ page }) => {
+    await installNativeBridge(page, { placement: { revision: 1, arrowX: 210 } })
+    await page.goto('/')
+    await expect.poll(() => page.evaluate(() => window.__PLACEMENT_TEST__?.readStarted)).toBe(true)
+    await expect(page.locator('.popover-arrow')).toHaveCount(0)
+    await expect(page.locator('.popover')).toHaveCSS('border-radius', '8px')
+    expect(await page.locator('.popover').boundingBox()).toEqual({ x: 6, y: 6, width: 408, height: 648 })
+  })
+})

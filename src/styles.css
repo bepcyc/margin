@@ -1,3 +1,11 @@
+@font-face {
+  font-family: Inter;
+  src: url('./assets/fonts/InterVariable.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
 :root {
   font-family: Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   font-synthesis: none;
@@ -190,13 +198,13 @@ button:disabled:hover {
 .desktop-stage .popover-arrow {
   top: 9px;
 }
-:root[data-platform=windows] .desktop-stage .app-shell {
+:root:is([data-platform=windows], [data-platform=linux]) .desktop-stage .app-shell {
   padding: 6px;
 }
-:root[data-platform=windows] .popover {
+:root:is([data-platform=windows], [data-platform=linux]) .popover {
   border-radius: 8px;
 }
-:root[data-platform=windows] .popover-arrow {
+:root:is([data-platform=windows], [data-platform=linux]) .popover-arrow {
   display: none;
 }
 .app-header {
@@ -1627,6 +1635,20 @@ input::placeholder {
 }
 .notice-banner>span {
   overflow-wrap: anywhere;
+}
+.bridge-close {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 2px 7px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+.bridge-close:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 .recovery-banner>div {
   display: flex;

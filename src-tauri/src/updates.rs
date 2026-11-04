@@ -109,6 +109,9 @@ pub async fn check_for_update(
 }
 
 async fn check(app: &AppHandle, updates: &Updates, quiet: bool) -> Result<UpdateStatus, String> {
+    if cfg!(target_os = "linux") {
+        return updates.fail(app, "Updates are not available for this Linux build. Update it through your package source.");
+    }
     let Ok(mut pending) = updates.pending.try_lock() else {
         return updates.status();
     };
@@ -154,6 +157,9 @@ pub fn due(last: Option<&str>, now: DateTime<Utc>) -> bool {
 }
 
 pub fn start_background_checks(app: AppHandle, runtime: Arc<Runtime>) {
+    if cfg!(target_os = "linux") {
+        return;
+    }
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(FIRST_CHECK_DELAY).await;
         loop {
@@ -194,6 +200,9 @@ pub async fn install_update(
     updates: State<'_, Updates>,
     version: String,
 ) -> Result<UpdateStatus, String> {
+    if cfg!(target_os = "linux") {
+        return updates.fail(&app, "Updates are not available for this Linux build. Update it through your package source.");
+    }
     let Ok(mut pending) = updates.pending.try_lock() else {
         return updates.status();
     };

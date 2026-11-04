@@ -8,7 +8,7 @@ const props = defineProps<{ settings: Settings; busy: boolean }>()
 const emit = defineEmits<{ change: [patch: Partial<Settings>] }>()
 const presets = [50, 80, 90, 95, 100]
 const choices = computed(() => [...new Set([...presets, ...props.settings.thresholds])].sort((a, b) => a - b))
-const systemSettings = navigator.userAgent.includes('Mac') ? 'System Settings' : 'Windows Settings'
+const systemSettings = navigator.userAgent.includes('Windows') ? 'Windows Settings' : 'System Settings'
 const blocked = computed(() => props.settings.notifications && props.settings.notificationPermission === 'denied')
 
 const remaining = (threshold: number): number => 100 - threshold
