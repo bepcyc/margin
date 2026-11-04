@@ -26,6 +26,8 @@ function validIcon(size, pixels, tooltip, revision) {
 export default class MarginBridge extends Extension {
     enable() {
         this.active = true;
+        this.lifecycle = (this.lifecycle ?? 0) + 1;
+        this.attempt = 0;
         this.connection = Gio.DBus.session;
         this.owner = null;
         this.pending = null;
@@ -63,12 +65,14 @@ export default class MarginBridge extends Extension {
             return;
         }
         this.pending = sender;
+        const lifecycle = this.lifecycle;
+        const attempt = ++this.attempt;
         this.connection.call('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'GetConnectionUnixProcessID',
             new GLib.Variant('(s)', [sender]), new GLib.VariantType('(u)'), Gio.DBusCallFlags.NONE, 2000, null,
             (connection, result) => {
                 try {
                     const [pid] = connection.call_finish(result).deep_unpack();
-                    if (!this.active || !pid || this.pending !== sender) throw new Error('Disconnected sender');
+                    if (!this.active || this.lifecycle !== lifecycle || this.attempt !== attempt || !pid || this.pending !== sender) throw new Error('Disconnected sender');
                     this.pending = null;
                     this.owner = sender;
                     this.pid = pid;
@@ -79,7 +83,8 @@ export default class MarginBridge extends Extension {
                     invocation.return_value(new GLib.Variant('(b)', [true]));
                 } catch (_error) {
                     logError(_error);
-                    if (this.pending === sender || this.owner === sender) this.reset();
+                    if (this.active && this.lifecycle === lifecycle && this.attempt === attempt &&
+                        (this.pending === sender || this.owner === sender)) this.reset();
                     invocation.return_value(new GLib.Variant('(b)', [false]));
                 }
             });
@@ -207,6 +212,7 @@ export default class MarginBridge extends Extension {
 
     disable() {
         this.active = false;
+        this.lifecycle++;
         this.connection.signal_unsubscribe(this.ownerSignal);
         global.window_manager.disconnect(this.mapSignal);
         global.display.disconnect(this.windowCreatedSignal);

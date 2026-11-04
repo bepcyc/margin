@@ -45,8 +45,13 @@ pub fn get_popover_placement(
 }
 
 #[tauri::command]
-pub fn fit_popover(app: AppHandle, height: f64) -> Result<(), String> {
-    crate::core::tray::fit(&app, height)
+pub fn fit_popover(
+    app: AppHandle,
+    height: f64,
+    pixel_ratio: f64,
+    fit_content: bool,
+) -> Result<(), String> {
+    crate::core::tray::fit(&app, height, pixel_ratio, fit_content)
 }
 
 #[tauri::command]

@@ -219,3 +219,23 @@ test('preview popover is shorter in compact and screenshots in both themes', asy
   expect(heights['1-account']).toBeLessThan(cardsSingle)
   expect(heights['1-account']).toBeLessThan(heights['5-accounts']!)
 })
+
+test.describe('Windows fitted compact layout', () => {
+  test.use({ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' })
+
+  test('keeps filtered rows visible and remeasures expanded content', async ({ page }) => {
+    await installBridge(page, bridgeState(null, 'compact'))
+    await page.goto('/')
+    await expect(page.locator('.compact-row')).toHaveCount(3)
+    await page.getByRole('button', { name: /^Claude 2/ }).click()
+    const filteredHeight = await lastFit(page)
+    await page.setViewportSize({ width: 420, height: filteredHeight })
+    await expect.poll(() => page.locator('.compact-row').last().evaluate(element => {
+      const row = element.getBoundingClientRect()
+      const viewport = element.closest('.accounts-scroll')!.getBoundingClientRect()
+      return row.top >= viewport.top && row.bottom <= viewport.bottom
+    })).toBe(true)
+    await page.locator('.compact-row').first().click()
+    await expect.poll(() => lastFit(page)).toBeGreaterThan(filteredHeight)
+  })
+})

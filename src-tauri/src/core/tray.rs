@@ -567,7 +567,32 @@ pub fn show(app: &AppHandle, settings: bool) {
     let _ = app.run_on_main_thread(move || show_on_main_thread(&handle, settings));
 }
 
-pub fn fit(app: &AppHandle, height: f64) -> Result<(), String> {
+pub fn fit(
+    app: &AppHandle,
+    height: f64,
+    pixel_ratio: f64,
+    fit_content: bool,
+) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    let height = {
+        let scale = app
+            .get_webview_window("main")
+            .and_then(|window| window.scale_factor().ok())
+            .filter(|scale| scale.is_finite() && *scale > 0.0)
+            .unwrap_or(1.0);
+        let pixel_ratio = if pixel_ratio.is_finite() && pixel_ratio > 0.0 {
+            pixel_ratio
+        } else {
+            scale
+        };
+        if fit_content {
+            height * pixel_ratio / scale
+        } else {
+            height
+        }
+    };
+    #[cfg(not(target_os = "linux"))]
+    let _ = (pixel_ratio, fit_content);
     let height = popover_height(Some(height));
     {
         let visibility = app.state::<Visibility>();
@@ -616,7 +641,10 @@ fn set_fixed_size(window: &tauri::WebviewWindow, size: tauri::Size) -> tauri::Re
 
 fn place(app: &AppHandle, window: &tauri::WebviewWindow) {
     #[cfg(target_os = "linux")]
-    if app.state::<crate::gnome_bridge::Bridge>().active() {
+    if app
+        .state::<crate::gnome_bridge::Bridge>()
+        .retains_position()
+    {
         let height = popover_height(
             app.state::<Visibility>()
                 .content_height
@@ -628,7 +656,9 @@ fn place(app: &AppHandle, window: &tauri::WebviewWindow) {
             window,
             tauri::LogicalSize::new(POPOVER_WIDTH, height).into(),
         );
-        crate::gnome_bridge::reposition(app);
+        if app.state::<crate::gnome_bridge::Bridge>().active() {
+            crate::gnome_bridge::reposition(app);
+        }
         return;
     }
     let height = popover_height(
@@ -742,16 +772,38 @@ fn show_on_main_thread(app: &AppHandle, settings: bool) {
 }
 
 #[cfg(target_os = "linux")]
-pub(crate) fn toggle_from_bridge(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        if window.is_visible().unwrap_or(false) {
-            if window.hide().is_ok() {
-                mark_hidden(app);
-            }
-        } else {
-            show(app, false);
+pub(crate) fn show_from_bridge(app: &AppHandle, settings: bool, generation: u64) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if handle
+            .state::<crate::gnome_bridge::Bridge>()
+            .is_active_generation(generation)
+        {
+            show_on_main_thread(&handle, settings);
         }
-    }
+    });
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn toggle_from_bridge(app: &AppHandle, generation: u64) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if !handle
+            .state::<crate::gnome_bridge::Bridge>()
+            .is_active_generation(generation)
+        {
+            return;
+        }
+        if let Some(window) = handle.get_webview_window("main") {
+            if window.is_visible().unwrap_or(false) {
+                if window.hide().is_ok() {
+                    mark_hidden(&handle);
+                }
+            } else {
+                show_on_main_thread(&handle, false);
+            }
+        }
+    });
 }
 
 #[cfg(target_os = "linux")]

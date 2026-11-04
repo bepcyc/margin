@@ -60,6 +60,8 @@ const scroller = ref<HTMLElement | null>(null)
 const accountList = ref<HTMLElement | null>(null)
 const fullHeight = 660
 const fitHeight = ref(0)
+let fitPixelRatio = 0
+let previousFitContent = false
 let fitFrame = 0
 let fitObserver: ResizeObserver | undefined
 let stopSettingsListener: (() => void) | undefined
@@ -104,14 +106,20 @@ function toggleExpanded(id: AccountId): void {
 function measureFit(): void {
   fitFrame = 0
   let height = fullHeight
-  if (fitsContent.value && shell.value && popover.value && scroller.value) {
+  const fitContent = Boolean(fitsContent.value && shell.value && popover.value && scroller.value && accountList.value)
+  if (fitContent && shell.value && popover.value && scroller.value && accountList.value) {
     const style = getComputedStyle(shell.value)
-    height = Math.ceil(parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) + popover.value.offsetHeight - scroller.value.clientHeight + scroller.value.scrollHeight)
+    const scrollStyle = getComputedStyle(scroller.value)
+    const contentHeight = accountList.value.getBoundingClientRect().height + parseFloat(scrollStyle.paddingTop) + parseFloat(scrollStyle.paddingBottom)
+    height = Math.ceil(parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) + popover.value.getBoundingClientRect().height - scroller.value.getBoundingClientRect().height + contentHeight)
   }
-  height = Math.min(height, fullHeight)
-  if (height === fitHeight.value) return
+  if (!isLinux || !fitContent) height = Math.min(height, fullHeight)
+  const pixelRatio = window.devicePixelRatio || 1
+  if (height === fitHeight.value && pixelRatio === fitPixelRatio && fitContent === previousFitContent) return
   fitHeight.value = height
-  if (desktop && !demo) window.__TAURI__?.core.invoke('fit_popover', { height }).catch(() => {})
+  fitPixelRatio = pixelRatio
+  previousFitContent = fitContent
+  if (desktop && !demo) window.__TAURI__?.core.invoke('fit_popover', { height, pixelRatio, fitContent }).catch(() => {})
 }
 
 function scheduleFit(): void {
@@ -196,7 +204,7 @@ async function togglePin(account: Account): Promise<void> {
 }
 
 function syncSystemTheme(event: MediaQueryListEvent): void { systemDark.value = event.matches }
-function syncViewportWidth(): void { viewportWidth.value = window.innerWidth }
+function syncViewportWidth(): void { viewportWidth.value = window.innerWidth; scheduleFit() }
 
 function acceptPopoverPlacement(payload: unknown): void {
   if (destroyed) return
