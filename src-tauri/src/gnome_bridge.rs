@@ -26,7 +26,39 @@ enum Phase {
 pub struct Bridge {
     phase: Mutex<Phase>,
     connection: Mutex<Option<Lease>>,
+    updates: Mutex<Updates>,
     ready: Notify,
+}
+
+#[derive(Default)]
+struct Updates {
+    pending: Option<glib::Variant>,
+    running: bool,
+    failures: u8,
+}
+
+impl Updates {
+    fn push(&mut self, params: glib::Variant) -> bool {
+        self.pending = Some(params);
+        if self.running {
+            false
+        } else {
+            self.running = true;
+            true
+        }
+    }
+
+    fn success(&mut self) -> Option<glib::Variant> {
+        self.failures = 0;
+        let next = self.pending.take();
+        self.running = next.is_some();
+        next
+    }
+
+    fn failure(&mut self) -> bool {
+        self.failures += 1;
+        self.failures >= 3
+    }
 }
 
 struct Lease {
@@ -336,6 +368,9 @@ pub fn start(app: &AppHandle) {
 
 pub fn update(app: &AppHandle, tooltip: &str, size: u32, pixels: &[u8], revision: u64) {
     let bridge = app.state::<Bridge>();
+    if !bridge.active() {
+        return;
+    }
     let Ok(current) = bridge.connection.lock() else {
         return;
     };
@@ -344,16 +379,54 @@ pub fn update(app: &AppHandle, tooltip: &str, size: u32, pixels: &[u8], revision
     };
     let connection = lease.connection.clone();
     let owner = lease.owner.clone();
+    drop(current);
     let app = app.clone();
     let params = (size, pixels, tooltip, revision).to_variant();
+    let Ok(mut updates) = bridge.updates.lock() else {
+        return;
+    };
+    if !updates.push(params) {
+        return;
+    }
+    drop(updates);
     glib::MainContext::default().spawn_local(async move {
-        if call(&connection, &owner, PATH, INTERFACE, "Update", &params)
-            .await
+        let bridge = app.state::<Bridge>();
+        let mut params = match bridge
+            .updates
+            .lock()
             .ok()
-            .and_then(|v| v.get::<(bool,)>())
-            != Some((true,))
+            .and_then(|mut u| u.pending.take())
         {
-            degraded(&app);
+            Some(params) => params,
+            None => return,
+        };
+        loop {
+            if !bridge.active() {
+                return;
+            }
+            let response = call(&connection, &owner, PATH, INTERFACE, "Update", &params).await;
+            if !bridge.active() {
+                return;
+            }
+            let Ok(mut updates) = bridge.updates.lock() else {
+                degraded(&app);
+                return;
+            };
+            if response.as_ref().ok().and_then(|v| v.get::<(bool,)>()) == Some((true,)) {
+                match updates.success() {
+                    Some(next) => params = next,
+                    None => return,
+                }
+            } else {
+                eprintln!("GNOME bridge Update failed: {response:?}");
+                if updates.failure() {
+                    degraded(&app);
+                    return;
+                }
+                if let Some(next) = updates.pending.take() {
+                    params = next;
+                }
+            }
         }
     });
 }
@@ -383,9 +456,47 @@ pub fn reposition(app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::{Bridge, Phase};
+    use super::{Bridge, Phase, Updates};
+    use glib::variant::ToVariant;
     use std::sync::Arc;
     use std::time::Duration;
+
+    #[test]
+    fn update_coalesces_and_keeps_latest_after_success() {
+        let mut updates = Updates::default();
+        assert!(updates.push(1_u64.to_variant()));
+        assert_eq!(updates.pending.take().unwrap().get::<u64>(), Some(1));
+        assert!(!updates.push(2_u64.to_variant()));
+        assert!(!updates.push(3_u64.to_variant()));
+        assert_eq!(updates.success().unwrap().get::<u64>(), Some(3));
+        assert!(updates.running);
+        assert!(updates.success().is_none());
+        assert!(!updates.running);
+    }
+
+    #[test]
+    fn continuous_failures_are_bounded_despite_new_updates() {
+        let mut updates = Updates::default();
+        assert!(updates.push(1_u64.to_variant()));
+        updates.pending.take();
+        assert!(!updates.failure());
+        assert!(!updates.push(2_u64.to_variant()));
+        assert!(!updates.failure());
+        assert!(!updates.push(3_u64.to_variant()));
+        assert!(updates.failure());
+    }
+
+    #[test]
+    fn transient_failure_then_success_resets_budget() {
+        let mut updates = Updates::default();
+        assert!(updates.push(1_u64.to_variant()));
+        updates.pending.take();
+        assert!(!updates.failure());
+        assert!(updates.success().is_none());
+        assert_eq!(updates.failures, 0);
+        assert!(updates.push(2_u64.to_variant()));
+        assert!(!updates.failure());
+    }
 
     #[test]
     fn late_registration_cannot_replace_degraded_state() {

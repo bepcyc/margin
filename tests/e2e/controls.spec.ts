@@ -70,6 +70,19 @@ test('panel recovery notice survives a refresh', async ({ page }) => {
   await expect(notice).toBeVisible()
   await page.getByRole('button', { name: 'Refresh usage' }).click()
   await expect(notice).toBeVisible()
+  const close = notice.getByRole('button', { name: 'Close', exact: true })
+  await close.focus()
+  await page.keyboard.press('Enter')
+  await expect.poll(() => page.evaluate(() => window.__CONTROL_TEST__?.commands.some(entry => entry.command === 'hide_window'))).toBe(true)
+})
+
+test('panel recovery close works by click', async ({ page }) => {
+  const state = createDemoState(null)
+  state.bridgeNotice = 'The GNOME panel connection is unavailable. Close and restart Margin to restore the tray icon.'
+  await installDesktopBridge(page, { state, failure: 'none' })
+  await page.goto('/')
+  await page.getByRole('alert').getByRole('button', { name: 'Close', exact: true }).click()
+  await expect.poll(() => page.evaluate(() => window.__CONTROL_TEST__?.commands.some(entry => entry.command === 'hide_window'))).toBe(true)
 })
 
 async function expectWithinViewport(page: Page, locator: Locator): Promise<void> {

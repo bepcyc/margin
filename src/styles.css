@@ -1636,6 +1636,20 @@ input::placeholder {
 .notice-banner>span {
   overflow-wrap: anywhere;
 }
+.bridge-close {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 2px 7px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+.bridge-close:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
 .recovery-banner>div {
   display: flex;
   flex-direction: column;
