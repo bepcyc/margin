@@ -27,6 +27,15 @@ gnome-extensions pack linux/gnome-shell/margin@bepcyc.github.io --out-dir /tmp
 gnome-extensions install /tmp/margin@bepcyc.github.io.shell-extension.zip
 ```
 
+On GNOME 46, installation can fail with `Can’t recursively copy directory` when the cache and extension directories are on different filesystems. If that happens, copy the extension files from the checkout instead:
+
+```sh
+extension_dir="${XDG_DATA_HOME:-$HOME/.local/share}/gnome-shell/extensions/margin@bepcyc.github.io"
+install -d -m 755 "$extension_dir"
+install -m 644 linux/gnome-shell/margin@bepcyc.github.io/metadata.json \
+  linux/gnome-shell/margin@bepcyc.github.io/extension.js "$extension_dir/"
+```
+
 Sign out and back in so GNOME Shell discovers the newly installed extension, then enable it:
 
 ```sh
